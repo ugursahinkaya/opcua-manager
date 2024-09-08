@@ -15,46 +15,36 @@ import {
   ClientSession,
   OPCUAClientOptions,
 } from "node-opcua";
-import {
+import type {
   RawClient,
-  RawManager,
+  ClientManager,
   RawMonitoredItem,
   RawSubscription,
   RawVariable,
-} from "./index.js";
-import { mapRawToTimestampsToReturn, createFilterFromRaw } from "./helpers.js";
-import { GenericRouter } from "@ugursahinkaya/generic-router";
-
-class OPCUAError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "OPCUAError";
-  }
-}
+} from "../index.js";
+import { mapRawToTimestampsToReturn, createFilterFromRaw } from "../helpers.js";
+import { BaseManager, OPCUAError } from "./base.js";
 
 const DEFAULT_TIMESTAMP_RETURN = 3;
 
-export class OPCUAManager {
+export class OPCUAClientManager extends BaseManager {
   client: OPCUAClient;
-  router: GenericRouter<any>;
   protected session?: ClientSession;
   protected applicationName: string;
   protected endpointUrl: string;
-  protected subscriptions: Map<string, ClientSubscription>;
+  protected subscriptions: Map<number, ClientSubscription>;
   protected monitoredItems: Map<string, ClientMonitoredItem>;
+  protected declare rawManager: ClientManager;
   protected variables: Map<string, WriteValue>;
-  protected rawManager: RawManager;
 
   constructor(
-    manager: RawManager,
+    manager: ClientManager,
     operations: Record<string, (...args: any[]) => any>
   ) {
+    super(manager, operations);
     this.applicationName = manager.applicationName;
     this.endpointUrl = manager.client.endpointUrl;
-    this.rawManager = manager;
-
     this.client = this.createClient(manager.client);
-    this.router = new GenericRouter(operations);
     this.monitoredItems = new Map();
     this.subscriptions = new Map();
     this.variables = new Map();
@@ -82,6 +72,8 @@ export class OPCUAManager {
 
   async connectClient() {
     try {
+      await this.importDependencies();
+      await this.resolveHandlers();
       await this.client.connect(this.endpointUrl);
       await this.initializeSession();
       await this.initializeSubscriptions();
@@ -115,17 +107,24 @@ export class OPCUAManager {
   private async initializeSubscriptions(): Promise<void> {
     const { subscriptions } = this.rawManager;
     if (subscriptions) {
-      for (const [name, options] of Object.entries(subscriptions)) {
-        await this.addSubscription(name, options);
+      let i = 0;
+      for (const options of subscriptions) {
+        await this.addSubscription(i, options.subscriptionOptions);
+        i++;
       }
     }
   }
 
   private async initializeMonitoredItems(): Promise<void> {
-    const { monitoredItems } = this.rawManager;
-    if (monitoredItems) {
-      for (const [name, options] of Object.entries(monitoredItems)) {
-        await this.addMonitoredItem(name, options);
+    const { subscriptions } = this.rawManager;
+    if (subscriptions) {
+      for (let i = 0; i < subscriptions.length; i++) {
+        const subscription = subscriptions[i];
+        await this.addMonitoredItem(
+          i,
+          subscription.itemOptions,
+          subscription.handler
+        );
       }
     }
   }
@@ -156,7 +155,7 @@ export class OPCUAManager {
   }
 
   async addSubscription(
-    subscriptionName: string,
+    subscriptionIndex: number,
     subscriptionOptions: RawSubscription
   ): Promise<void> {
     const session = await this.getSession();
@@ -164,52 +163,59 @@ export class OPCUAManager {
       session,
       subscriptionOptions
     );
-    this.subscriptions.set(subscriptionName, subscription);
+    this.subscriptions.set(subscriptionIndex, subscription);
   }
 
-  async removeSubscription(subscriptionName: string): Promise<void> {
-    const subscription = this.subscriptions.get(subscriptionName);
+  async removeSubscription(subscriptionIndex: number): Promise<void> {
+    const subscription = this.subscriptions.get(subscriptionIndex);
     if (subscription) {
       await subscription.terminate();
-      console.log(`Subscription ${subscriptionName} terminated.`);
-      this.subscriptions.delete(subscriptionName);
+      console.log(`Subscription ${subscriptionIndex} terminated.`);
+      this.subscriptions.delete(subscriptionIndex);
     } else {
-      console.error(`Subscription ${subscriptionName} not found.`);
+      console.error(`Subscription ${subscriptionIndex} not found.`);
     }
   }
 
-  addMonitoredItem(itemName: string, rawMonitoredItem: RawMonitoredItem): void {
-    const { subscriptionName, itemOptions, handler } = rawMonitoredItem;
-    const subscription = this.subscriptions.get(subscriptionName);
+  addMonitoredItem(
+    subscriptionIndex: number,
+    rawMonitoredItem: RawMonitoredItem,
+    handler: string
+  ): void {
+    const subscription = this.subscriptions.get(subscriptionIndex);
+
     if (!subscription) {
-      throw new OPCUAError(`Subscription ${subscriptionName} not found`);
+      throw new OPCUAError(`Subscription ${subscriptionIndex} not found`);
     }
 
     const monitoredItem = ClientMonitoredItem.create(
       subscription,
       {
-        nodeId: coerceNodeId(itemOptions.nodeId),
+        nodeId: coerceNodeId(rawMonitoredItem.nodeId),
         attributeId:
-          AttributeIds[itemOptions.attributeId as keyof typeof AttributeIds],
-        indexRange: itemOptions.indexRange
-          ? new NumericRange(itemOptions.indexRange)
+          AttributeIds[
+            rawMonitoredItem.attributeId as keyof typeof AttributeIds
+          ],
+        indexRange: rawMonitoredItem.indexRange
+          ? new NumericRange(rawMonitoredItem.indexRange)
           : undefined,
       },
       {
-        clientHandle: itemOptions.monitoringParameters?.clientHandle,
-        samplingInterval: itemOptions.monitoringParameters?.samplingInterval,
-        filter: itemOptions.monitoringParameters?.filter
-          ? createFilterFromRaw(itemOptions.monitoringParameters.filter)
+        clientHandle: rawMonitoredItem.monitoringParameters?.clientHandle,
+        samplingInterval:
+          rawMonitoredItem.monitoringParameters?.samplingInterval,
+        filter: rawMonitoredItem.monitoringParameters?.filter
+          ? createFilterFromRaw(rawMonitoredItem.monitoringParameters.filter)
           : undefined,
-        queueSize: itemOptions.monitoringParameters?.queueSize,
-        discardOldest: itemOptions.monitoringParameters?.discardOldest,
+        queueSize: rawMonitoredItem.monitoringParameters?.queueSize,
+        discardOldest: rawMonitoredItem.monitoringParameters?.discardOldest,
       },
-      itemOptions.timestampsToReturn
-        ? mapRawToTimestampsToReturn(itemOptions.timestampsToReturn)
+      rawMonitoredItem.timestampsToReturn
+        ? mapRawToTimestampsToReturn(rawMonitoredItem.timestampsToReturn)
         : DEFAULT_TIMESTAMP_RETURN
     );
 
-    this.monitoredItems.set(itemName, monitoredItem);
+    this.monitoredItems.set(rawMonitoredItem.nodeId, monitoredItem);
     monitoredItem.on("changed", (dataValue: DataValue) =>
       this.router.call(handler, {}, dataValue)
     );
@@ -236,7 +242,7 @@ export class OPCUAManager {
     if (!variable) {
       throw new OPCUAError(`Variable ${nodeId} not found`);
     }
-
+    variable;
     variable.value.value = new Variant({
       dataType: DataType[dataType],
       value: value,

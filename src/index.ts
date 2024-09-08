@@ -6,7 +6,10 @@ import {
   SecurityPolicy,
   TimestampsToReturn,
 } from "node-opcua";
-export { OPCUAManager } from "./OPCUA-manager.js";
+export { OPCUAClientManager } from "./manager/client.js";
+export { OPCUAServerManager } from "./manager/server.js";
+export { OPCUAClientPlugin } from "./plugin/client.js";
+export { OPCUAServerPlugin } from "./plugin/server.js";
 
 export type RawDataChangeFilter = {
   trigger: keyof typeof DataChangeTrigger;
@@ -40,12 +43,12 @@ export type RawMonitoringFilter =
   | { type: "None"; filter: null };
 
 export type RawSubscription = {
-  requestedPublishingInterval: number;
-  requestedLifetimeCount: number;
-  requestedMaxKeepAliveCount: number;
-  maxNotificationsPerPublish: number;
-  publishingEnabled: boolean;
-  priority: number;
+  requestedPublishingInterval?: number;
+  requestedLifetimeCount?: number;
+  requestedMaxKeepAliveCount?: number;
+  maxNotificationsPerPublish?: number;
+  publishingEnabled?: boolean;
+  priority?: number;
 };
 
 export type RawMonitoringParameters = {
@@ -57,15 +60,11 @@ export type RawMonitoringParameters = {
 };
 
 export type RawMonitoredItem = {
-  subscriptionName: string;
-  itemOptions: {
-    nodeId: string;
-    attributeId: string;
-    indexRange?: string | null;
-    monitoringParameters?: RawMonitoringParameters;
-    timestampsToReturn?: keyof typeof TimestampsToReturn;
-  };
-  handler: string;
+  nodeId: string;
+  attributeId: string;
+  indexRange?: string | null;
+  monitoringParameters?: RawMonitoringParameters;
+  timestampsToReturn?: keyof typeof TimestampsToReturn;
 };
 
 export type RawVariable<T> = {
@@ -73,6 +72,7 @@ export type RawVariable<T> = {
   nodeId: string;
   dataType: keyof typeof DataType;
   value: T;
+  handler?: string;
 };
 
 export type RawClient = {
@@ -83,10 +83,40 @@ export type RawClient = {
   securityPolicy?: keyof typeof SecurityPolicy;
 };
 
-export type RawManager = {
-  applicationName: string;
-  client: RawClient;
-  subscriptions?: Record<string, RawSubscription>;
-  monitoredItems?: Record<string, RawMonitoredItem>;
+export type RawServer = {
+  name: string;
+  port: number;
+  //TODO: extend with more options
   variables?: Record<string, RawVariable<any>>;
+};
+export type Dependency = {
+  initArgs: Record<string, any>;
+  version: string;
+  instanceName?: string;
+};
+
+export type ManagerBase = {
+  applicationName: string;
+  dependencies: Record<string, Dependency>;
+  handlers?: Record<
+    string,
+    {
+      module: string;
+      operation: string;
+      instance?: string;
+    }
+  >;
+};
+export type ClientManager = ManagerBase & {
+  client: RawClient;
+  subscriptions?: {
+    subscriptionOptions: RawSubscription;
+    itemOptions: RawMonitoredItem;
+    handler: string;
+  }[];
+  variables?: Record<string, RawVariable<any>>;
+};
+
+export type ServerManager = ManagerBase & {
+  servers: Record<string, RawServer>;
 };

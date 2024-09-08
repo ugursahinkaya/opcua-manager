@@ -1,7 +1,7 @@
 {
   "name": "@ugursahinkaya/opcua-manager",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "license": "GPL-3.0 or Commerical",
   "description": "",
   "author": "Uğur Şahinkaya <ugur@sahinkaya.xyz>",
@@ -44,6 +44,8 @@
   "dependencies": {
     "@types/node": "^22.5.4",
     "@ugursahinkaya/generic-router": "^0.2.0",
+    "@ugursahinkaya/module-manager": "^0.0.5",
+    "mongodb": "^6.8.0",
     "node-opcua": "^2.130.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.4"
