@@ -1,4 +1,4 @@
-# Secure Auth Middleware
+# OPCUA Manager
 
 ## License
 
