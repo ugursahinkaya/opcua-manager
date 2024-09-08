@@ -30,7 +30,7 @@ export function OPCUAServerPlugin(args?: {
   try {
     dbClient.connect();
   } catch (err) {
-    console.error("Bir hata oluştu:", err);
+    console.error("Error while db connecting", err);
   }
 
   async function saveStatus(name: string, active: boolean) {
