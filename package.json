@@ -1,7 +1,7 @@
 {
-  "name": "@ugursahinkaya/opcua-manager",
+  "name": "@ugursahinkaya/opcua",
   "type": "module",
-  "version": "0.1.1",
+  "version": "0.0.1",
   "license": "GPL-3.0 or Commerical",
   "description": "",
   "author": "Uğur Şahinkaya <ugur@sahinkaya.xyz>",
@@ -14,40 +14,5 @@
     "type": "git",
     "url": "git+https://github.com/ugursahinkaya/opcua-manager.git"
   },
-  "bugs": "https://github.com/ugursahinkaya/opcua-manager/issues",
-  "scripts": {
-    "build": "rm -rf ./dist && tsc -p tsconfig.json",
-    "start": "node --loader ts-node/esm ./src/index.ts"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "node": "./dist/index.js",
-      "default": "./dist/index.js"
-    }
-  },
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "typesVersions": {
-    "*": {
-      "*": [
-        "./dist/*",
-        "./dist/index.d.ts"
-      ]
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "keywords": [],
-  "dependencies": {
-    "@types/node": "^22.5.4",
-    "@ugursahinkaya/generic-router": "^0.2.0",
-    "@ugursahinkaya/module-manager": "^0.0.5",
-    "mongodb": "^6.8.0",
-    "node-opcua": "^2.130.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.5.4"
-  }
+  "bugs": "https://github.com/ugursahinkaya/opcua-manager/issues"
 }

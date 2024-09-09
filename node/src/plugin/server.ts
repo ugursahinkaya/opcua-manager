@@ -86,7 +86,7 @@ export function OPCUAServerPlugin(args?: {
     const newManager = new OPCUAServerManager(manager, operations);
     void saveStatus(applicationName, false);
     managers.set(applicationName, newManager);
-    return newManager;
+    return { ...manager, active: true };
   }
 
   function useServer(managerName: string, serverName: string) {
@@ -96,9 +96,15 @@ export function OPCUAServerPlugin(args?: {
   }
 
   async function saveManager(
-    manager: ServerManager & Record<string, any>,
+    {
+      filter,
+      manager,
+    }: {
+      manager: ServerManager & Record<string, any>;
+      filter: Record<string, any>;
+    },
     context: { payload: { sender: string } }
-  ): Promise<UpdateResult<ServerManager> | InsertOneResult<ServerManager>> {
+  ): Promise<ServerManager[]> {
     const user = context.payload.sender;
     const { name } = manager;
     const old = await dbClient
@@ -107,7 +113,7 @@ export function OPCUAServerPlugin(args?: {
       .findOne({ name, type: "server" });
     if (old) {
       delete manager._id;
-      return await dbClient
+      await dbClient
         .db(opcuaDb)
         .collection(managersCollection)
         .updateOne(
@@ -119,15 +125,22 @@ export function OPCUAServerPlugin(args?: {
             },
           }
         );
+    } else {
+      await dbClient
+        .db(opcuaDb)
+        .collection(managersCollection)
+        .insertOne({
+          ...manager,
+          type: "server",
+          meta: { user, firstSave: new Date() },
+        });
     }
+
     return await dbClient
       .db(opcuaDb)
       .collection(managersCollection)
-      .insertOne({
-        ...manager,
-        type: "server",
-        meta: { user, firstSave: new Date() },
-      });
+      .find<ServerManager>({ ...filter, type: "server" })
+      .toArray();
   }
 
   async function getManagers(filter: Record<string, any>) {

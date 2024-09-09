@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "sourceMap": false,
+    "declaration": true,
+    "allowJs": true,
+    "outDir": "./dist" // Ensure this directory exists
+  }
+}

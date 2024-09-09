@@ -34,7 +34,11 @@ export function OPCUAClientPlugin(args?: {
     const old = await dbClient
       .db(opcuaDb)
       .collection(managersCollection)
-      .findOne({ applicationName, "client.endpointUrl": client.endpointUrl });
+      .findOne({
+        applicationName,
+        "client.endpointUrl": client.endpointUrl,
+        type: "client",
+      });
     if (old) {
       await dbClient
         .db(opcuaDb)
@@ -56,7 +60,7 @@ export function OPCUAClientPlugin(args?: {
     const manager = managers.get(`${applicationName}-${client.endpointUrl}`);
     manager?.disconnectClient();
     void saveStatus(rawManager, false);
-    return;
+    return { ...rawManager, active: true };
   }
 
   function useManager(
@@ -67,22 +71,32 @@ export function OPCUAClientPlugin(args?: {
     const newManager = new OPCUAClientManager(manager, operations);
     managers.set(`${applicationName}-${client.endpointUrl}`, newManager);
     void saveStatus(manager, true);
-    return newManager;
+    return { ...manager, active: true };
   }
 
   async function saveManager(
-    manager: ClientManager & Record<string, any>,
+    {
+      filter,
+      manager,
+    }: {
+      manager: ClientManager & Record<string, any>;
+      filter?: Record<string, any>;
+    },
     context: { payload: { sender: string } }
-  ): Promise<UpdateResult<ClientManager> | InsertOneResult<ClientManager>> {
+  ) {
     const user = context.payload.sender;
     const { applicationName, client } = manager;
     const old = await dbClient
       .db(opcuaDb)
       .collection(managersCollection)
-      .findOne({ applicationName, "client.endpointUrl": client.endpointUrl });
+      .findOne({
+        applicationName,
+        "client.endpointUrl": client.endpointUrl,
+        type: "client",
+      });
     if (old) {
       delete manager._id;
-      return await dbClient
+      await dbClient
         .db(opcuaDb)
         .collection(managersCollection)
         .updateOne(
@@ -95,22 +109,35 @@ export function OPCUAClientPlugin(args?: {
             },
           }
         );
+    } else {
+      await dbClient
+        .db(opcuaDb)
+        .collection(managersCollection)
+        .insertOne({
+          ...manager,
+          client,
+          meta: { user, firstSave: new Date() },
+        });
     }
-    return await dbClient
-      .db(opcuaDb)
-      .collection(managersCollection)
-      .insertOne({ ...manager, client, meta: { user, firstSave: new Date() } });
+    return await getManagers(filter);
   }
 
-  async function getManagers(filter: Record<string, any>) {
+  async function getManagers(filter?: Record<string, any>) {
+    filter = filter ?? {};
     return (await dbClient
       .db(opcuaDb)
       .collection(managersCollection)
-      .find(filter)
+      .find({ ...filter, type: "client" })
       .toArray()) as unknown as ClientManager[];
   }
 
-  async function removeManagers(idList: string[]) {
+  async function removeManagers({
+    idList,
+    filter,
+  }: {
+    idList: string[];
+    filter?: Record<string, any>;
+  }) {
     const selector = { id: { $in: idList.map((id) => new ObjectId(id)) } };
     const list = await dbClient
       .db(opcuaDb)
@@ -127,7 +154,7 @@ export function OPCUAClientPlugin(args?: {
       .db(opcuaDb)
       .collection(managersCollection)
       .deleteMany(selector);
-    return await getManagers({});
+    return await getManagers(filter);
   }
 
   return {
